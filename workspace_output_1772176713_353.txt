@@ -1,0 +1,25 @@
+total 264
+drwxr-xr-x  5 user user  4096 Feb 27 07:18 .
+drwxr-xr-x 20 root root  4096 Feb 20 01:32 ..
+drwxr-xr-x  4 user user  4096 Feb 27 07:15 .agent_hooks
+-rw-r--r--  1 root root 14862 Feb 27 06:38 COMPONENTS.md
+-rw-r--r--  1 root root  7343 Feb 27 06:38 DEPLOYMENT.md
+-rw-r--r--  1 root root  7257 Feb 27 06:48 ENHANCEMENTS_SUMMARY.md
+-rw-r--r--  1 root root  8055 Feb 27 06:47 README.md
+-rw-r--r--  1 root root  8936 Feb 27 06:38 admin.css
+-rw-r--r--  1 root root 12001 Feb 27 06:38 admin.html
+-rw-r--r--  1 root root 19221 Feb 27 06:44 admin.js
+-rw-r--r--  1 root root 22106 Feb 27 06:41 backend.js
+drwxr-xr-x  2 root root  4096 Feb 27 07:18 core
+-rw-r--r--  1 root root 28921 Feb 27 06:43 frontend.js
+-rw-r--r--  1 root root  6109 Feb 27 06:38 index.html
+-rw-r--r--  1 root root  9265 Feb 27 06:38 integration.js
+drwxr-xr-x  2 root root  4096 Feb 27 07:18 outputs
+-rw-r--r--  1 root root 15774 Feb 27 07:17 styles.css
+-rw-r--r--  1 root root 29874 Feb 27 06:38 test.html
+-rw-r--r--  1 root root  2067 Feb 27 06:48 todo.md
+-rw-r--r--  1 root root 11834 Feb 27 06:38 wallet-backend.js
+-rw-r--r--  1 root root 19221 Feb 27 06:38 wallet-frontend.js
+-rw-r--r--  1 root root     0 Feb 27 06:38 workspace_output_1772124848_6561.txt
+-rw-r--r--  1 root root     0 Feb 27 06:38 workspace_output_1772126871_7477.txt
+-rw-r--r--  1 root root     0 Feb 27 06:38 workspace_output_1772126887_3056.txt

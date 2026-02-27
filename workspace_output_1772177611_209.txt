@@ -1,0 +1,175 @@
+/**
+ * Global Pilgrim Trader - Trading Engine
+ * Owner: Olawale Abdul-Ganiyu
+ * Contact: adeganglobal@gmail.com, +2349030277275
+ */
+
+class TradingEngine {
+    constructor(database) {
+        this.db = database;
+        this.robotTrades = new Map();
+        this.marketInterval = null;
+    }
+
+    executeManualTrade(userId, symbol, type, lotSize) {
+        const marketData = this.db.getMarketData();
+        const pair = marketData.pairs.find(p => p.symbol === symbol);
+        
+        if (!pair) {
+            return { success: false, message: 'Invalid currency pair' };
+        }
+
+        if (lotSize < 0.01 || lotSize > 500) {
+            return { success: false, message: 'Invalid lot size' };
+        }
+
+        const entryPrice = type === 'buy' ? pair.ask : pair.bid;
+
+        const result = this.db.createTrade({
+            userId,
+            symbol,
+            type,
+            lotSize,
+            entryPrice,
+            mode: 'manual'
+        });
+
+        return result;
+    }
+
+    startRobotTrading(userId) {
+        if (this.robotTrades.has(userId)) {
+            return { success: false, message: 'Robot trading already active' };
+        }
+
+        this.robotTrades.set(userId, true);
+        this.executeRobotTrade(userId);
+        
+        return { success: true, message: 'Robot trading started' };
+    }
+
+    stopRobotTrading(userId) {
+        this.robotTrades.delete(userId);
+        return { success: true, message: 'Robot trading stopped' };
+    }
+
+    executeRobotTrade(userId) {
+        if (!this.robotTrades.has(userId)) return;
+
+        const marketData = this.db.getMarketData();
+        const pair = marketData.pairs[Math.floor(Math.random() * marketData.pairs.length)];
+        
+        const trend = Math.random() > 0.45 ? 'up' : 'down';
+        const tradeType = trend === 'up' ? 'buy' : 'sell';
+
+        const entryPrice = tradeType === 'buy' ? pair.ask : pair.bid;
+
+        const result = this.db.createTrade({
+            userId,
+            symbol: pair.symbol,
+            type: tradeType,
+            lotSize: 0.1,
+            entryPrice,
+            mode: 'robot'
+        });
+
+        if (result.success) {
+            setTimeout(() => {
+                this.monitorRobotTrade(result.trade.id, pair);
+            }, 6000);
+        }
+    }
+
+    monitorRobotTrade(tradeId, pair) {
+        const trade = this.db.data.trades.find(t => t.id === tradeId);
+        if (!trade || trade.status !== 'active') return;
+
+        const profitBias = 0.0003;
+        const priceChange = (Math.random() - 0.4) * 0.0020;
+        const currentPrice = trade.type === 'buy' 
+            ? pair.ask + priceChange + profitBias 
+            : pair.bid - priceChange - profitBias;
+
+        const profit = trade.type === 'buy' 
+            ? (currentPrice - trade.entryPrice) * trade.lotSize * 100000 
+            : (trade.entryPrice - currentPrice) * trade.lotSize * 100000;
+
+        if (profit >= 0.02) {
+            this.db.closeTrade(tradeId, currentPrice);
+            
+            if (this.robotTrades.has(trade.userId)) {
+                setTimeout(() => {
+                    this.executeRobotTrade(trade.userId);
+                }, 1000);
+            }
+        } else if (profit <= -0.01) {
+            this.db.closeTrade(tradeId, currentPrice);
+            
+            if (this.robotTrades.has(trade.userId)) {
+                setTimeout(() => {
+                    this.executeRobotTrade(trade.userId);
+                }, 1000);
+            }
+        } else {
+            setTimeout(() => {
+                this.monitorRobotTrade(tradeId, pair);
+            }, 6000);
+        }
+    }
+
+    closeTrade(tradeId) {
+        const trade = this.db.data.trades.find(t => t.id === tradeId);
+        if (!trade) {
+            return { success: false, message: 'Trade not found' };
+        }
+
+        const marketData = this.db.getMarketData();
+        const pair = marketData.pairs.find(p => p.symbol === trade.symbol);
+        
+        if (!pair) {
+            return { success: false, message: 'Currency pair not found' };
+        }
+
+        const exitPrice = trade.type === 'buy' ? pair.bid : pair.ask;
+        return this.db.closeTrade(tradeId, exitPrice);
+    }
+
+    startMarketUpdates(callback) {
+        if (this.marketInterval) {
+            clearInterval(this.marketInterval);
+        }
+
+        this.marketInterval = setInterval(() => {
+            this.db.updateMarketData();
+            if (callback) callback(this.db.getMarketData());
+        }, 1000);
+    }
+
+    stopMarketUpdates() {
+        if (this.marketInterval) {
+            clearInterval(this.marketInterval);
+            this.marketInterval = null;
+        }
+    }
+
+    getTradingSummary(userId) {
+        const trades = this.db.getUserTrades(userId);
+        const activeTrades = trades.filter(t => t.status === 'active');
+        const closedTrades = trades.filter(t => t.status === 'closed');
+
+        const totalProfit = closedTrades.reduce((sum, t) => sum + t.profit, 0);
+        const winRate = closedTrades.length > 0 
+            ? (closedTrades.filter(t => t.profit > 0).length / closedTrades.length) * 100 
+            : 0;
+
+        return {
+            totalTrades: trades.length,
+            activeTrades: activeTrades.length,
+            closedTrades: closedTrades.length,
+            totalProfit,
+            winRate: winRate.toFixed(2)
+        };
+    }
+}
+
+window.TradingEngine = TradingEngine;

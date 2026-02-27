@@ -1,0 +1,3 @@
+78:                this.monitorRobotTrade(result.trade.id, pair);
+83:    monitorRobotTrade(tradeId, pair) {
+115:                this.monitorRobotTrade(tradeId, pair);

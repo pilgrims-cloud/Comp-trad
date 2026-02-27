@@ -1,0 +1,473 @@
+/**
+ * Global Pilgrim Trader - Main Application
+ * Owner: Olawale Abdul-Ganiyu
+ * Contact: adeganglobal@gmail.com, +2349030277275
+ */
+
+class App {
+    constructor() {
+        this.db = new Database();
+        this.trading = new TradingEngine(this.db);
+        this.payment = new PaymentProcessor(this.db);
+        this.currentUser = null;
+        this.marketInterval = null;
+        
+        this.init();
+    }
+
+    init() {
+        this.checkSession();
+        this.setupEventListeners();
+        this.startMarketUpdates();
+    }
+
+    checkSession() {
+        const session = localStorage.getItem('gpt_v2_session');
+        if (session) {
+            this.currentUser = JSON.parse(session);
+            this.showDashboard();
+        }
+    }
+
+    saveSession(user) {
+        localStorage.setItem('gpt_v2_session', JSON.stringify(user));
+        this.currentUser = user;
+    }
+
+    clearSession() {
+        localStorage.removeItem('gpt_v2_session');
+        this.currentUser = null;
+    }
+
+    login(email, password) {
+        let user;
+        if (email.includes('@')) {
+            user = this.db.findUserByEmail(email);
+        } else {
+            user = this.db.findUserByAccountNumber(email);
+        }
+
+        if (!user) {
+            return { success: false, message: 'Invalid credentials' };
+        }
+
+        if (user.password !== this.db.hashPassword(password)) {
+            return { success: false, message: 'Invalid credentials' };
+        }
+
+        if (user.status === 'pending') {
+            return { success: false, message: 'Account pending approval' };
+        }
+
+        this.saveSession(this.db.sanitizeUser(user));
+        return { success: true, user: this.db.sanitizeUser(user) };
+    }
+
+    register(userData) {
+        const result = this.db.createUser(userData);
+        return result;
+    }
+
+    logout() {
+        this.trading.stopRobotTrading(this.currentUser?.id);
+        this.clearSession();
+        window.location.reload();
+    }
+
+    executeTrade(symbol, type, lotSize) {
+        if (!this.currentUser) {
+            return { success: false, message: 'Not logged in' };
+        }
+
+        return this.trading.executeManualTrade(
+            this.currentUser.id,
+            symbol,
+            type,
+            lotSize
+        );
+    }
+
+    startRobot() {
+        if (!this.currentUser) {
+            return { success: false, message: 'Not logged in' };
+        }
+
+        return this.trading.startRobotTrading(this.currentUser.id);
+    }
+
+    stopRobot() {
+        if (!this.currentUser) {
+            return { success: false, message: 'Not logged in' };
+        }
+
+        return this.trading.stopRobotTrading(this.currentUser.id);
+    }
+
+    closeTrade(tradeId) {
+        return this.trading.closeTrade(tradeId);
+    }
+
+    requestDeposit(amount, method) {
+        if (!this.currentUser) {
+            return { success: false, message: 'Not logged in' };
+        }
+
+        return this.payment.requestDeposit(this.currentUser.id, amount, method);
+    }
+
+    requestWithdrawal(amount, method, accountDetails) {
+        if (!this.currentUser) {
+            return { success: false, message: 'Not logged in' };
+        }
+
+        return this.payment.requestWithdrawal(
+            this.currentUser.id,
+            amount,
+            method,
+            accountDetails
+        );
+    }
+
+    transferFunds(toAccountNumber, amount) {
+        if (!this.currentUser) {
+            return { success: false, message: 'Not logged in' };
+        }
+
+        return this.payment.transferFunds(
+            this.currentUser.id,
+            toAccountNumber,
+            amount
+        );
+    }
+
+    getUserData() {
+        if (!this.currentUser) return null;
+        
+        const user = this.db.findUserById(this.currentUser.id);
+        if (!user) return null;
+
+        return {
+            ...this.db.sanitizeUser(user),
+            trades: this.trading.getTradingSummary(this.currentUser.id),
+            payments: this.payment.getPaymentSummary(this.currentUser.id)
+        };
+    }
+
+    getMarketData() {
+        return this.db.getMarketData();
+    }
+
+    getActiveTrades() {
+        if (!this.currentUser) return [];
+        return this.db.getUserTrades(this.currentUser.id).filter(t => t.status === 'active');
+    }
+
+    getTransactionHistory() {
+        if (!this.currentUser) return [];
+        return this.db.getUserTransactions(this.currentUser.id);
+    }
+
+    approveUser(userId) {
+        return this.db.updateUser(userId, { status: 'active' });
+    }
+
+    getAllUsers() {
+        return this.db.getAllUsers();
+    }
+
+    getPendingUsers() {
+        return this.db.getAllUsers().filter(u => u.status === 'pending');
+    }
+
+    processTransaction(transactionId) {
+        return this.payment.processTransaction(transactionId);
+    }
+
+    getSystemStats() {
+        return this.db.getStats();
+    }
+
+    startMarketUpdates() {
+        this.trading.startMarketUpdates((marketData) => {
+            this.updateMarketDisplay(marketData);
+        });
+    }
+
+    updateMarketDisplay(marketData) {
+        const event = new CustomEvent('marketUpdate', { detail: marketData });
+        window.dispatchEvent(event);
+    }
+
+    showDashboard() {
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        this.renderDashboard();
+    }
+
+    showLanding() {
+        document.getElementById('landingPage').style.display = 'block';
+        document.getElementById('dashboard').style.display = 'none';
+    }
+
+    renderDashboard() {
+        const userData = this.getUserData();
+        if (!userData) return;
+
+        document.getElementById('userName').textContent = userData.name;
+        document.getElementById('userAccount').textContent = userData.accountNumber;
+        document.getElementById('userBalance').textContent = '$' + userData.balance.toLocaleString();
+        document.getElementById('userProfit').textContent = '$' + userData.profit.toLocaleString();
+
+        document.getElementById('totalTrades').textContent = userData.trades.totalTrades;
+        document.getElementById('activeTrades').textContent = userData.trades.activeTrades;
+        document.getElementById('winRate').textContent = userData.trades.winRate + '%';
+
+        this.renderActiveTrades();
+        this.renderTransactionHistory();
+    }
+
+    renderActiveTrades() {
+        const trades = this.getActiveTrades();
+        const container = document.getElementById('activeTradesList');
+        
+        if (trades.length === 0) {
+            container.innerHTML = '<p class="no-data">No active trades</p>';
+            return;
+        }
+
+        container.innerHTML = trades.map(trade => `
+            <div class="trade-card">
+                <div class="trade-header">
+                    <span class="trade-symbol">${trade.symbol}</span>
+                    <span class="trade-type ${trade.type}">${trade.type.toUpperCase()}</span>
+                </div>
+                <div class="trade-details">
+                    <div class="trade-detail">
+                        <span class="label">Entry:</span>
+                        <span class="value">${trade.entryPrice.toFixed(5)}</span>
+                    </div>
+                    <div class="trade-detail">
+                        <span class="label">Current:</span>
+                        <span class="value">${trade.currentPrice.toFixed(5)}</span>
+                    </div>
+                    <div class="trade-detail">
+                        <span class="label">Lot Size:</span>
+                        <span class="value">${trade.lotSize}</span>
+                    </div>
+                    <div class="trade-detail">
+                        <span class="label">Mode:</span>
+                        <span class="value">${trade.mode}</span>
+                    </div>
+                </div>
+                <div class="trade-actions">
+                    <button onclick="app.closeTrade('${trade.id}')" class="btn-close">Close Trade</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    renderTransactionHistory() {
+        const transactions = this.getTransactionHistory();
+        const container = document.getElementById('transactionHistory');
+        
+        if (transactions.length === 0) {
+            container.innerHTML = '<p class="no-data">No transactions</p>';
+            return;
+        }
+
+        container.innerHTML = transactions.slice(0, 10).map(tx => `
+            <div class="transaction-card">
+                <div class="transaction-type ${tx.type}">${tx.type.toUpperCase()}</div>
+                <div class="transaction-details">
+                    <div class="transaction-amount">$${tx.amount.toLocaleString()}</div>
+                    <div class="transaction-method">${tx.method}</div>
+                    <div class="transaction-status ${tx.status}">${tx.status}</div>
+                    <div class="transaction-date">${new Date(tx.createdAt).toLocaleDateString()}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    setupEventListeners() {
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            const result = this.login(email, password);
+            if (result.success) {
+                this.showDashboard();
+                this.showMessage('Login successful!', 'success');
+            } else {
+                this.showMessage(result.message, 'error');
+            }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const userData = {
+                name: document.getElementById('regName').value,
+                email: document.getElementById('regEmail').value,
+                phone: document.getElementById('regPhone').value,
+                password: document.getElementById('regPassword').value
+            };
+            
+            const result = this.register(userData);
+            if (result.success) {
+                this.showMessage('Account created! Account Number: ' + result.user.accountNumber, 'success');
+                document.getElementById('registerForm').reset();
+                this.closeModal('registerModal');
+            } else {
+                this.showMessage(result.message, 'error');
+            }
+        });
+
+        document.getElementById('btnBuy').addEventListener('click', () => {
+            const symbol = document.getElementById('tradeSymbol').value;
+            const lotSize = parseFloat(document.getElementById('tradeLotSize').value);
+            const result = this.executeTrade(symbol, 'buy', lotSize);
+            this.handleTradeResult(result);
+        });
+
+        document.getElementById('btnSell').addEventListener('click', () => {
+            const symbol = document.getElementById('tradeSymbol').value;
+            const lotSize = parseFloat(document.getElementById('tradeLotSize').value);
+            const result = this.executeTrade(symbol, 'sell', lotSize);
+            this.handleTradeResult(result);
+        });
+
+        document.getElementById('btnStartRobot').addEventListener('click', () => {
+            const result = this.startRobot();
+            if (result.success) {
+                this.showMessage('Robot trading started!', 'success');
+                document.getElementById('robotStatus').textContent = 'Active';
+                document.getElementById('robotStatus').classList.add('active');
+            } else {
+                this.showMessage(result.message, 'error');
+            }
+        });
+
+        document.getElementById('btnStopRobot').addEventListener('click', () => {
+            const result = this.stopRobot();
+            if (result.success) {
+                this.showMessage('Robot trading stopped!', 'success');
+                document.getElementById('robotStatus').textContent = 'Inactive';
+                document.getElementById('robotStatus').classList.remove('active');
+            } else {
+                this.showMessage(result.message, 'error');
+            }
+        });
+
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            this.logout();
+        });
+
+        document.getElementById('depositForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const amount = parseFloat(document.getElementById('depositAmount').value);
+            const method = document.getElementById('depositMethod').value;
+            
+            const result = this.requestDeposit(amount, method);
+            if (result.success) {
+                this.showMessage('Deposit request of $' + amount + ' submitted!', 'success');
+                this.addTerminalMessage('Deposit request: $' + amount + ' via ' + method, 'info');
+                this.addTerminalMessage('Signature: ' + result.transaction.signature.signature.substring(0, 16) + '...', 'info');
+                this.addTerminalMessage('Signed by: ' + result.transaction.signature.owner, 'info');
+                document.getElementById('depositForm').reset();
+                this.closeModal('depositModal');
+            } else {
+                this.showMessage(result.message, 'error');
+            }
+        });
+
+        document.getElementById('withdrawForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const amount = parseFloat(document.getElementById('withdrawAmount').value);
+            const method = document.getElementById('withdrawMethod').value;
+            const details = document.getElementById('withdrawDetails').value;
+            
+            const result = this.requestWithdrawal(amount, method, details);
+            if (result.success) {
+                this.showMessage('Withdrawal request of $' + amount + ' submitted!', 'success');
+                this.addTerminalMessage('Withdrawal request: $' + amount + ' via ' + method, 'info');
+                this.addTerminalMessage('Signature: ' + result.transaction.signature.signature.substring(0, 16) + '...', 'info');
+                this.addTerminalMessage('Signed by: ' + result.transaction.signature.owner, 'info');
+                document.getElementById('withdrawForm').reset();
+                this.closeModal('withdrawModal');
+            } else {
+                this.showMessage(result.message, 'error');
+            }
+        });
+
+        document.getElementById('transferForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const toAccount = document.getElementById('transferAccount').value;
+            const amount = parseFloat(document.getElementById('transferAmount').value);
+            
+            const result = this.transferFunds(toAccount, amount);
+            if (result.success) {
+                this.showMessage(result.message, 'success');
+                this.addTerminalMessage('Transfer: $' + amount + ' to ' + toAccount, 'success');
+                this.renderDashboard();
+                document.getElementById('transferForm').reset();
+                this.closeModal('transferModal');
+            } else {
+                this.showMessage(result.message, 'error');
+            }
+        });
+
+        window.addEventListener('marketUpdate', (e) => {
+            this.updateMarketPrices(e.detail);
+        });
+    }
+
+    handleTradeResult(result) {
+        if (result.success) {
+            this.showMessage('Trade executed successfully!', 'success');
+            this.renderDashboard();
+            this.addTerminalMessage('Trade executed: ' + result.trade.type.toUpperCase() + ' ' + result.trade.symbol + ' @ ' + result.trade.entryPrice, 'success');
+            this.addTerminalMessage('Signature: ' + result.trade.signature.signature.substring(0, 16) + '...', 'info');
+            this.addTerminalMessage('Signed by: ' + result.trade.signature.owner, 'info');
+        } else {
+            this.showMessage(result.message, 'error');
+        }
+    }
+
+    updateMarketPrices(marketData) {
+        const selectedSymbol = document.getElementById('tradeSymbol').value;
+        const pair = marketData.pairs.find(p => p.symbol === selectedSymbol);
+        
+        if (pair) {
+            document.getElementById('currentBid').textContent = pair.bid.toFixed(5);
+            document.getElementById('currentAsk').textContent = pair.ask.toFixed(5);
+        }
+    }
+
+    addTerminalMessage(message, type = 'info') {
+        const terminal = document.getElementById('terminal');
+        const line = document.createElement('div');
+        line.className = 'terminal-line ' + type;
+        line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+        terminal.appendChild(line);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    showMessage(message, type) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ' + type;
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+        
+        setTimeout(() => {
+            messageDiv.remove();
+        }, 3000);
+    }
+
+    closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new App();
+});

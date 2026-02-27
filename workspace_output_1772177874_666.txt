@@ -1,0 +1,33 @@
+    monitorRobotTrade(tradeId, pair) {
+        const trade = this.db.data.trades.find(t => t.id === tradeId);
+        if (!trade || trade.status !== 'active') return;
+
+        const profitBias = 0.0003;
+        const priceChange = (Math.random() - 0.4) * 0.0020;
+        const currentPrice = trade.type === 'buy' 
+            ? pair.ask + priceChange + profitBias 
+            : pair.bid - priceChange - profitBias;
+
+        const profit = trade.type === 'buy' 
+            ? (currentPrice - trade.entryPrice) * trade.lotSize * 100000 
+            : (trade.entryPrice - currentPrice) * trade.lotSize * 100000;
+
+        if (profit >= 0.02) {
+            this.db.closeTrade(tradeId, currentPrice);
+            
+            if (this.robotTrades.has(trade.userId)) {
+                setTimeout(() => {
+                    this.executeRobotTrade(trade.userId);
+                }, 1000);
+            }
+        } else if (profit <= -0.01) {
+            this.db.closeTrade(tradeId, currentPrice);
+            
+            if (this.robotTrades.has(trade.userId)) {
+                setTimeout(() => {
+                    this.executeRobotTrade(trade.userId);
+                }, 1000);
+            }
+        } else {
+            setTimeout(() => {
+                this.monitorRobotTrade(tradeId, pair);

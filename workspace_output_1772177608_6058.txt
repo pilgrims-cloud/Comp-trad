@@ -1,0 +1,320 @@
+/**
+ * Global Pilgrim Trader - Core Database System
+ * Owner: Olawale Abdul-Ganiyu
+ * Contact: adeganglobal@gmail.com, +2349030277275
+ */
+
+class Database {
+    constructor() {
+        this.STORAGE_KEY = 'gpt_v2_data';
+        this.data = this.loadData();
+        this.initialize();
+    }
+
+    loadData() {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            return stored ? JSON.parse(stored) : null;
+        } catch (e) {
+            console.error('Error loading data:', e);
+            return null;
+        }
+    }
+
+    saveData() {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
+            return true;
+        } catch (e) {
+            console.error('Error saving data:', e);
+            return false;
+        }
+    }
+
+    initialize() {
+        if (!this.data) {
+            this.data = {
+                users: [],
+                trades: [],
+                transactions: [],
+                marketData: this.generateInitialMarketData(),
+                settings: {
+                    owner: 'Olawale Abdul-Ganiyu',
+                    ownerEmail: 'adeganglobal@gmail.com',
+                    ownerPhone: '+2349030277275',
+                    version: '2.0',
+                    createdAt: new Date().toISOString()
+                }
+            };
+            this.createAdminUser();
+            this.saveData();
+        }
+    }
+
+    createAdminUser() {
+        const admin = {
+            id: this.generateId('USR'),
+            accountNumber: '0022345678',
+            name: 'Olawale Abdul-Ganiyu',
+            email: 'adeganglobal@gmail.com',
+            phone: '+2349030277275',
+            password: this.hashPassword('admin123'),
+            role: 'admin',
+            balance: 1000000,
+            profit: 0,
+            status: 'active',
+            createdAt: new Date().toISOString()
+        };
+        this.data.users.push(admin);
+    }
+
+    generateId(prefix) {
+        return prefix + Date.now() + Math.random().toString(36).substr(2, 9);
+    }
+
+    hashPassword(password) {
+        return btoa(password);
+    }
+
+    generateAccountNumber() {
+        let accountNumber;
+        do {
+            accountNumber = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+        } while (this.findUserByAccountNumber(accountNumber));
+        return accountNumber;
+    }
+
+    generateInitialMarketData() {
+        return {
+            pairs: [
+                { symbol: 'EUR/USD', bid: 1.0850, ask: 1.0852, change: 0.15 },
+                { symbol: 'GBP/USD', bid: 1.2650, ask: 1.2652, change: -0.08 },
+                { symbol: 'USD/JPY', bid: 149.50, ask: 149.52, change: 0.22 },
+                { symbol: 'AUD/USD', bid: 0.6540, ask: 0.6542, change: 0.05 },
+                { symbol: 'USD/CAD', bid: 1.3550, ask: 1.3552, change: -0.12 },
+                { symbol: 'USD/CHF', bid: 0.8750, ask: 0.8752, change: 0.03 }
+            ],
+            lastUpdate: new Date().toISOString()
+        };
+    }
+
+    findUserByEmail(email) {
+        return this.data.users.find(u => u.email === email);
+    }
+
+    findUserByAccountNumber(accountNumber) {
+        return this.data.users.find(u => u.accountNumber === accountNumber);
+    }
+
+    findUserById(id) {
+        return this.data.users.find(u => u.id === id);
+    }
+
+    createUser(userData) {
+        if (this.findUserByEmail(userData.email)) {
+            return { success: false, message: 'Email already exists' };
+        }
+
+        const user = {
+            id: this.generateId('USR'),
+            accountNumber: this.generateAccountNumber(),
+            name: userData.name,
+            email: userData.email,
+            phone: userData.phone,
+            password: this.hashPassword(userData.password),
+            role: 'user',
+            balance: 0,
+            profit: 0,
+            status: 'pending',
+            createdAt: new Date().toISOString()
+        };
+
+        this.data.users.push(user);
+        this.saveData();
+        return { success: true, user: this.sanitizeUser(user) };
+    }
+
+    updateUser(userId, updates) {
+        const user = this.findUserById(userId);
+        if (!user) return { success: false, message: 'User not found' };
+
+        Object.assign(user, updates);
+        this.saveData();
+        return { success: true, user: this.sanitizeUser(user) };
+    }
+
+    updateUserBalance(userId, amount, type) {
+        const user = this.findUserById(userId);
+        if (!user) return { success: false, message: 'User not found' };
+
+        const newBalance = type === 'credit' ? user.balance + amount : user.balance - amount;
+        if (newBalance < 0) return { success: false, message: 'Insufficient balance' };
+
+        user.balance = newBalance;
+        this.saveData();
+        return { success: true, balance: newBalance };
+    }
+
+    updateUserProfit(userId, amount) {
+        const user = this.findUserById(userId);
+        if (!user) return { success: false, message: 'User not found' };
+
+        user.profit += amount;
+        this.saveData();
+        return { success: true, profit: user.profit };
+    }
+
+    sanitizeUser(user) {
+        const { password, ...sanitized } = user;
+        return sanitized;
+    }
+
+    getAllUsers() {
+        return this.data.users.map(u => this.sanitizeUser(u));
+    }
+
+    createTrade(tradeData) {
+        const trade = {
+            id: this.generateId('TRD'),
+            userId: tradeData.userId,
+            symbol: tradeData.symbol,
+            type: tradeData.type,
+            lotSize: tradeData.lotSize,
+            entryPrice: tradeData.entryPrice,
+            currentPrice: tradeData.entryPrice,
+            status: 'active',
+            profit: 0,
+            mode: tradeData.mode,
+            signature: this.generateSignature(tradeData),
+            createdAt: new Date().toISOString()
+        };
+
+        this.data.trades.push(trade);
+        this.saveData();
+        return { success: true, trade };
+    }
+
+    closeTrade(tradeId, exitPrice) {
+        const tradeIndex = this.data.trades.findIndex(t => t.id === tradeId);
+        if (tradeIndex === -1) return { success: false, message: 'Trade not found' };
+
+        const trade = this.data.trades[tradeIndex];
+        trade.exitPrice = exitPrice;
+        trade.status = 'closed';
+        trade.closedAt = new Date().toISOString();
+
+        const priceDiff = trade.type === 'buy' ? exitPrice - trade.entryPrice : trade.entryPrice - exitPrice;
+        trade.profit = priceDiff * trade.lotSize * 100000;
+
+        if (trade.profit > 0) {
+            this.updateUserBalance(trade.userId, trade.profit, 'credit');
+            this.updateUserProfit(trade.userId, trade.profit);
+        } else if (trade.profit < 0) {
+            this.updateUserBalance(trade.userId, Math.abs(trade.profit), 'debit');
+            this.updateUserProfit(trade.userId, trade.profit);
+        }
+
+        trade.closingSignature = this.generateSignature({
+            tradeId,
+            exitPrice,
+            profit: trade.profit
+        });
+
+        this.saveData();
+        return { success: true, trade };
+    }
+
+    getUserTrades(userId) {
+        return this.data.trades.filter(t => t.userId === userId);
+    }
+
+    createTransaction(transactionData) {
+        const transaction = {
+            id: this.generateId('TXN'),
+            userId: transactionData.userId,
+            type: transactionData.type,
+            amount: transactionData.amount,
+            method: transactionData.method,
+            status: 'pending',
+            details: transactionData.details || {},
+            signature: this.generateSignature(transactionData),
+            createdAt: new Date().toISOString()
+        };
+
+        this.data.transactions.push(transaction);
+        this.saveData();
+        return { success: true, transaction };
+    }
+
+    processTransaction(transactionId) {
+        const transaction = this.data.transactions.find(t => t.id === transactionId);
+        if (!transaction) return { success: false, message: 'Transaction not found' };
+
+        if (transaction.type === 'deposit') {
+            const result = this.updateUserBalance(transaction.userId, transaction.amount, 'credit');
+            if (!result.success) return result;
+        } else if (transaction.type === 'withdrawal') {
+            const result = this.updateUserBalance(transaction.userId, transaction.amount, 'debit');
+            if (!result.success) return result;
+        }
+
+        transaction.status = 'completed';
+        transaction.processedAt = new Date().toISOString();
+        this.saveData();
+        return { success: true, transaction };
+    }
+
+    getUserTransactions(userId) {
+        return this.data.transactions.filter(t => t.userId === userId);
+    }
+
+    updateMarketData() {
+        this.data.marketData.pairs.forEach(pair => {
+            const change = (Math.random() - 0.5) * 0.0010;
+            pair.bid += change;
+            pair.ask = pair.bid + 0.0002;
+            pair.change = (Math.random() - 0.5) * 0.5;
+        });
+        this.data.marketData.lastUpdate = new Date().toISOString();
+        this.saveData();
+        return this.data.marketData;
+    }
+
+    getMarketData() {
+        return this.data.marketData;
+    }
+
+    generateSignature(data) {
+        const owner = this.data.settings.owner;
+        const timestamp = Date.now();
+        const dataString = JSON.stringify(data) + timestamp + owner;
+        const signature = btoa(dataString).substring(0, 64);
+        return {
+            signature,
+            owner,
+            timestamp,
+            verified: true
+        };
+    }
+
+    getStats() {
+        return {
+            totalUsers: this.data.users.length,
+            activeUsers: this.data.users.filter(u => u.status === 'active').length,
+            pendingUsers: this.data.users.filter(u => u.status === 'pending').length,
+            totalBalance: this.data.users.reduce((sum, u) => sum + u.balance, 0),
+            totalProfit: this.data.users.reduce((sum, u) => sum + u.profit, 0),
+            activeTrades: this.data.trades.filter(t => t.status === 'active').length,
+            completedTrades: this.data.trades.filter(t => t.status === 'closed').length,
+            pendingTransactions: this.data.transactions.filter(t => t.status === 'pending').length
+        };
+    }
+
+    reset() {
+        localStorage.removeItem(this.STORAGE_KEY);
+        this.data = null;
+        this.initialize();
+    }
+}
+
+window.Database = Database;

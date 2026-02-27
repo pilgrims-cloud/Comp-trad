@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Test - Global Pilgrim Trader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        h2 { color: #666; margin-top: 0; }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        button:hover { background: #0056b3; }
+        #output {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
+</head>
+<body>
+    <h1>🧪 System Test - Global Pilgrim Trader</h1>
+    
+    <div class="test-section">
+        <h2>Test Controls</h2>
+        <button onclick="runAllTests()">Run All Tests</button>
+        <button onclick="testLogin()">Test Login</button>
+        <button onclick="testManualTrade()">Test Manual Trade</button>
+        <button onclick="testRobotTrading()">Test Robot Trading</button>
+        <button onclick="testDeposit()">Test Deposit</button>
+        <button onclick="testWithdrawal()">Test Withdrawal</button>
+        <button onclick="clearData()">Clear All Data</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Output</h2>
+        <div id="output"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Current Status</h2>
+        <div id="status"></div>
+    </div>
+
+    <!-- Load Scripts -->
+    <script src="core/database.js"></script>
+    <script src="core/trading.js"></script>
+    <script src="core/payment.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        const output = document.getElementById('output');
+        const status = document.getElementById('status');
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function updateStatus() {
+            if (!window.app || !window.app.currentUser) {
+                status.innerHTML = '<p class="error">Not logged in</p>';
+                return;
+            }
+            
+            const userData = window.app.getUserData();
+            if (userData) {
+                status.innerHTML = `
+                    <p><strong>User:</strong> ${userData.name}</p>
+                    <p><strong>Balance:</strong> $${userData.balance.toLocaleString()}</p>
+                    <p><strong>Profit:</strong> $${userData.profit.toLocaleString()}</p>
+                    <p><strong>Active Trades:</strong> ${userData.trades.activeTrades}</p>
+                    <p><strong>Total Trades:</strong> ${userData.trades.totalTrades}</p>
+                    <p><strong>Win Rate:</strong> ${userData.trades.winRate}%</p>
+                `;
+            }
+        }
+
+        async function runAllTests() {
+            output.innerHTML = '';
+            log('Starting comprehensive system tests...', 'info');
+            
+            await testLogin();
+            await new Promise(r => setTimeout(r, 1000));
+            await testManualTrade();
+            await new Promise(r => setTimeout(r, 1000));
+            await testRobotTrading();
+            await new Promise(r => setTimeout(r, 1000));
+            await testDeposit();
+            await new Promise(r => setTimeout(r, 1000));
+            await testWithdrawal();
+            
+            log('All tests completed!', 'success');
+            updateStatus();
+        }
+
+        async function testLogin() {
+            log('Testing login with admin credentials...', 'info');
+            
+            const result = window.app.login('adeganglobal@gmail.com', 'admin123');
+            
+            if (result.success) {
+                log(`✓ Login successful! User: ${result.user.name}`, 'success');
+                log(`✓ Account Number: ${result.user.accountNumber}`, 'success');
+                log(`✓ Balance: $${result.user.balance.toLocaleString()}`, 'success');
+                updateStatus();
+            } else {
+                log(`✗ Login failed: ${result.message}`, 'error');
+            }
+        }
+
+        async function testManualTrade() {
+            if (!window.app.currentUser) {
+                log('Please login first', 'error');
+                return;
+            }
+            
+            log('Testing manual trade execution...', 'info');
+            
+            const result = window.app.executeTrade('EUR/USD', 'buy', 0.1);
+            
+            if (result.success) {
+                log(`✓ Trade executed successfully!`, 'success');
+                log(`✓ Symbol: ${result.trade.symbol}`, 'success');
+                log(`✓ Type: ${result.trade.type.toUpperCase()}`, 'success');
+                log(`✓ Entry Price: ${result.trade.entryPrice.toFixed(5)}`, 'success');
+                log(`✓ Lot Size: ${result.trade.lotSize}`, 'success');
+                log(`✓ Signature: ${result.trade.signature.signature.substring(0, 16)}...`, 'success');
+                log(`✓ Signed by: ${result.trade.signature.owner}`, 'success');
+                updateStatus();
+            } else {
+                log(`✗ Trade failed: ${result.message}`, 'error');
+            }
+        }
+
+        async function testRobotTrading() {
+            if (!window.app.currentUser) {
+                log('Please login first', 'error');
+                return;
+            }
+            
+            log('Testing robot trading...', 'info');
+            
+            const startResult = window.app.startRobot();
+            
+            if (startResult.success) {
+                log(`✓ Robot trading started!`, 'success');
+                log(`✓ Robot will execute trades every 6 seconds`, 'success');
+                log(`✓ Profit bias: +0.0003 (60% win rate)`, 'success');
+                log(`✓ Take Profit: $20, Stop Loss: -$10`, 'success');
+                
+                // Wait for some trades to execute
+                log('Waiting 15 seconds for robot trades...', 'info');
+                await new Promise(r => setTimeout(r, 15000));
+                
+                const stopResult = window.app.stopRobot();
+                if (stopResult.success) {
+                    log(`✓ Robot trading stopped`, 'success');
+                }
+                
+                updateStatus();
+            } else {
+                log(`✗ Robot trading failed: ${startResult.message}`, 'error');
+            }
+        }
+
+        async function testDeposit() {
+            if (!window.app.currentUser) {
+                log('Please login first', 'error');
+                return;
+            }
+            
+            log('Testing deposit functionality...', 'info');
+            
+            const result = window.app.requestDeposit(1000, 'credit_card');
+            
+            if (result.success) {
+                log(`✓ Deposit request submitted!`, 'success');
+                log(`✓ Amount: $${result.transaction.amount.toLocaleString()}`, 'success');
+                log(`✓ Method: ${result.transaction.method}`, 'success');
+                log(`✓ Status: ${result.transaction.status}`, 'success');
+                log(`✓ Signature: ${result.transaction.signature.signature.substring(0, 16)}...`, 'success');
+                log(`✓ Signed by: ${result.transaction.signature.owner}`, 'success');
+                
+                // Process the deposit
+                const processResult = window.app.processTransaction(result.transaction.id);
+                if (processResult.success) {
+                    log(`✓ Deposit processed successfully!`, 'success');
+                    updateStatus();
+                }
+            } else {
+                log(`✗ Deposit failed: ${result.message}`, 'error');
+            }
+        }
+
+        async function testWithdrawal() {
+            if (!window.app.currentUser) {
+                log('Please login first', 'error');
+                return;
+            }
+            
+            log('Testing withdrawal functionality...', 'info');
+            
+            const result = window.app.requestWithdrawal(500, 'bank_transfer', 'Account: 1234567890');
+            
+            if (result.success) {
+                log(`✓ Withdrawal request submitted!`, 'success');
+                log(`✓ Amount: $${result.transaction.amount.toLocaleString()}`, 'success');
+                log(`✓ Method: ${result.transaction.method}`, 'success');
+                log(`✓ Status: ${result.transaction.status}`, 'success');
+                log(`✓ Signature: ${result.transaction.signature.signature.substring(0, 16)}...`, 'success');
+                log(`✓ Signed by: ${result.transaction.signature.owner}`, 'success');
+                updateStatus();
+            } else {
+                log(`✗ Withdrawal failed: ${result.message}`, 'error');
+            }
+        }
+
+        function clearData() {
+            if (confirm('Are you sure you want to clear all data? This will reset the entire system.')) {
+                window.app.db.reset();
+                log('✓ All data cleared successfully!', 'success');
+                output.innerHTML = '';
+                status.innerHTML = '';
+                window.location.reload();
+            }
+        }
+
+        // Auto-update status every 2 seconds
+        setInterval(updateStatus, 2000);
+    </script>
+</body>
+</html>
